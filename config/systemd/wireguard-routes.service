@@ -1,0 +1,18 @@
+[Unit]
+Description=Add routes for WireGuard VPN private networks
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Route WireGuard client subnet via local gateway (before ProtonVPN rules)
+ExecStart=/sbin/ip rule add to 10.200.143.0/24 lookup main priority 100
+ExecStart=/sbin/ip route add 10.0.0.0/8 via 192.168.10.1 dev bond0
+ExecStart=/sbin/ip route add 172.16.0.0/12 via 192.168.10.1 dev bond0
+ExecStop=/sbin/ip rule del to 10.200.143.0/24 lookup main priority 100
+ExecStop=/sbin/ip route del 10.0.0.0/8 via 192.168.10.1 dev bond0
+ExecStop=/sbin/ip route del 172.16.0.0/12 via 192.168.10.1 dev bond0
+
+[Install]
+WantedBy=multi-user.target

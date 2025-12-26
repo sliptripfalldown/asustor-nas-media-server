@@ -1,0 +1,57 @@
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+
+    root /var/www/nas-portal;
+    index index.html;
+
+    server_name _;
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+
+    # ISO/File downloads with directory browsing
+    location /iso {
+        alias /tank/share/iso;
+        autoindex on;
+        autoindex_exact_size off;
+        autoindex_localtime on;
+        autoindex_format html;
+        
+        sendfile on;
+        tcp_nopush on;
+        tcp_nodelay on;
+        
+        client_max_body_size 0;
+        
+        add_header Access-Control-Allow-Origin *;
+        add_header Accept-Ranges bytes;
+    }
+
+    # Speedtest endpoint for bandwidth testing
+    location /speedtest {
+        alias /var/www/nas-portal/speedtest;
+        autoindex on;
+        autoindex_exact_size on;
+        
+        # Disable caching for accurate tests
+        add_header Cache-Control "no-store, no-cache, must-revalidate";
+        add_header Pragma "no-cache";
+        expires -1;
+        
+        sendfile on;
+        tcp_nopush on;
+        tcp_nodelay on;
+        
+        add_header Access-Control-Allow-Origin *;
+        add_header Timing-Allow-Origin *;
+    }
+    
+    # Upload endpoint for upload speed testing
+    location = /speedtest/upload {
+        client_max_body_size 100M;
+        client_body_buffer_size 100M;
+        return 200 "OK";
+    }
+}

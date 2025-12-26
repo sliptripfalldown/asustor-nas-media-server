@@ -1,0 +1,21 @@
+# Build artifacts
+*.o
+*.so
+*.a
+
+# Temporary files
+*.tmp
+*.log
+*.bak
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# VPN configs (contain private keys)
+config/wireguard/servers/*.conf
+config/wireguard/active.conf

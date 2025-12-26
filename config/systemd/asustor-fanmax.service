@@ -1,0 +1,11 @@
+[Unit]
+Description=Set ASUSTOR fans to maximum
+After=multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/bash -c 'for pwm in /sys/class/hwmon/*/pwm1; do [ -f "$pwm" ] && echo 255 > "$pwm"; done'
+
+[Install]
+WantedBy=multi-user.target

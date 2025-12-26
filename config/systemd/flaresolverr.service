@@ -1,0 +1,18 @@
+[Unit]
+Description=FlareSolverr - Cloudflare bypass for Prowlarr
+After=network.target
+
+[Service]
+Type=simple
+User=anon
+Group=anon
+WorkingDirectory=/opt/FlareSolverr
+Environment="LOG_LEVEL=info"
+Environment="CAPTCHA_SOLVER=none"
+Environment="HEADLESS=true"
+ExecStart=/usr/bin/python3 /opt/FlareSolverr/src/flaresolverr.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,14 @@
+[Unit]
+Description=Unpackerr - Extracts downloads for Radarr/Sonarr
+After=network.target radarr.service sonarr.service
+
+[Service]
+Type=simple
+User=anon
+Group=anon
+ExecStart=/home/anon/.local/bin/unpackerr -c /home/anon/.config/unpackerr/unpackerr.conf
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

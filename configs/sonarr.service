@@ -1,0 +1,14 @@
+[Unit]
+Description=Sonarr TV Series Manager
+After=network.target
+
+[Service]
+Type=simple
+User=anon
+Group=anon
+ExecStart=/opt/Sonarr/Sonarr -nobrowser -data=/home/anon/.config/Sonarr
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,11 @@
+[Unit]
+Description=qBittorrent Queue Manager - Prioritize Healthy Downloads
+After=network.target qbittorrent-vpn.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /home/anon/nas-media-server/scripts/qbit-queue-manager.py
+User=anon
+
+[Install]
+WantedBy=multi-user.target

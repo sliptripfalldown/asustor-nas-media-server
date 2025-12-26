@@ -1,0 +1,4 @@
+# This directory contains WireGuard configs from ProtonVPN
+# Download from: https://account.protonvpn.com/downloads#wireguard-configuration
+# Select P2P-enabled servers for port forwarding support
+# Download multiple configs for failover redundancy

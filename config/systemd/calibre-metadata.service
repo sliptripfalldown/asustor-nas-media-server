@@ -1,0 +1,14 @@
+[Unit]
+Description=Calibre Metadata Fetcher
+After=network.target
+
+[Service]
+Type=oneshot
+User=anon
+Group=anon
+ExecStart=/home/anon/nas-media-server/scripts/calibre-metadata.sh
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,14 @@
+[Unit]
+Description=Prowlarr Indexer Manager
+After=network.target
+
+[Service]
+Type=simple
+User=anon
+Group=anon
+ExecStart=/opt/Prowlarr/Prowlarr -nobrowser -data=/home/anon/.config/Prowlarr
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

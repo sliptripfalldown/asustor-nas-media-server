@@ -1,0 +1,15 @@
+[Unit]
+Description=LazyLibrarian - Book management and downloader
+After=network.target qbittorrent-nox.service
+
+[Service]
+Type=simple
+User=anon
+Group=anon
+WorkingDirectory=/home/anon/LazyLibrarian
+ExecStart=/usr/bin/python3 /home/anon/LazyLibrarian/LazyLibrarian.py --datadir=/var/lib/lazylibrarian --nolaunch
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
