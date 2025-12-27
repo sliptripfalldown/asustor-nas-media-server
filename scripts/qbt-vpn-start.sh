@@ -89,6 +89,12 @@ setup_vpn_in_namespace() {
     ip netns exec $NAMESPACE ip link del $WG_IF 2>/dev/null || true
     ip link del $WG_IF 2>/dev/null || true
 
+    # Fix namespace routing - ensure link-local route exists for veth subnet
+    # This prevents "Nexthop has invalid gateway" errors when routes get corrupted
+    ip netns exec $NAMESPACE ip route del 10.200.200.0/24 2>/dev/null || true
+    ip netns exec $NAMESPACE ip route add 10.200.200.0/24 dev veth-vpn scope link 2>/dev/null || true
+    ip netns exec $NAMESPACE ip route replace default via 10.200.200.1 2>/dev/null || true
+
     # Create interface and move to namespace
     ip link add $WG_IF type wireguard
     ip link set $WG_IF netns $NAMESPACE
