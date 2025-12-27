@@ -1,0 +1,14 @@
+[Unit]
+Description=qBittorrent Ratio Guard - Protect against ratio abuse
+After=network.target qbittorrent-vpn.service
+
+[Service]
+Type=oneshot
+ExecStart=/home/anon/nas-media-server/scripts/qbt-ratio-guard.py
+User=anon
+Environment=QB_URL=http://10.200.200.2:8080
+Environment=QB_USER=admin
+Environment=QB_PASS=adminadmin
+
+[Install]
+WantedBy=multi-user.target

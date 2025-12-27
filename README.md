@@ -22,8 +22,9 @@ A comprehensive guide to building a self-hosted media server from scratch on Ubu
 16. [qBittorrent Optimization](#qbittorrent-optimization-thousands-of-torrents)
 17. [Queue Management](#queue-management)
 18. [Automation Scripts](#automation-scripts)
-19. [Security Considerations](#security-considerations)
-20. [Troubleshooting](#troubleshooting)
+19. [Ratio Abuse Protection](#ratio-abuse-protection)
+20. [Security Considerations](#security-considerations)
+21. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -1350,7 +1351,8 @@ These run on the normal network (only talk to local services + legitimate APIs):
 | lidarr | `lidarr.service` | Music manager |
 | lazylibrarian | `lazylibrarian.service` | Book/audiobook manager |
 | unpackerr | `unpackerr.service` | Archive extractor |
-| qbit-queue-manager | `qbit-queue-manager.timer` | Auto-prioritize healthy downloads |
+| qbit-queue-manager | `qbit-queue-manager.timer` | Auto-prioritize healthy downloads (every 30 min) |
+| qbt-ratio-guard | `qbt-ratio-guard.timer` | Protect against ratio abuse (every 15 min) |
 
 #### System Services
 
@@ -1398,6 +1400,7 @@ These run on the normal network (only talk to local services + legitimate APIs):
 | `restart-qbittorrent.sh` | Manual/cron script to restart qBittorrent |
 | `setup-qbt-restart-cron.sh` | Setup auto-restart cron for qBittorrent (every 4h) |
 | `qbit-queue-manager.py` | Prioritize healthy downloads over struggling ones |
+| `qbt-ratio-guard.py` | Protect against ratio abuse on incomplete torrents |
 | `apply-torrent-optimizations.sh` | Apply kernel + qBittorrent optimizations |
 
 #### Build Scripts
@@ -1754,8 +1757,87 @@ This script:
 
 | Time | Task |
 |------|------|
+| Every 15 min | Ratio Guard (protect against abuse) |
+| Every 30 min | Queue Manager (prioritize healthy torrents) |
 | Every 4 hours | Restart qBittorrent |
 | Daily 04:00 | Restart all *arr services |
+
+---
+
+## Ratio Abuse Protection
+
+Prevents torrents from uploading excessively, especially in dead swarms where incomplete torrents keep seeding pieces to each other indefinitely.
+
+### The Problem
+
+In "dead swarms," no one has the complete file but everyone keeps sharing what they have. This causes:
+- Infinite upload on incomplete torrents (e.g., 1000:1 ratio on a 64% complete file)
+- Wasted bandwidth with no download progress
+- Torrents that will never complete
+
+### Solution: qbt-ratio-guard.py
+
+The ratio guard script runs every 15 minutes and:
+
+1. **Stops seeding** on incomplete torrents with ratio > 5x (keeps downloading)
+2. **Logs warnings** for torrents approaching 3x ratio
+3. **Flags dead swarms** (ratio > 10x AND availability < 50%) for review
+4. **Logs everything** to `/var/log/qbt-ratio-guard.log`
+
+### Thresholds
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `MAX_RATIO_INCOMPLETE` | 5.0 | Stop seeding incomplete torrents above this |
+| `MAX_RATIO_DEAD_SWARM` | 10.0 | Flag for manual removal |
+| `MIN_AVAILABILITY_DEAD` | 0.5 | Combined with high ratio = dead swarm |
+| `NOTIFY_RATIO` | 3.0 | Log warning |
+
+### Global qBittorrent Limits
+
+These are set automatically but can be adjusted in qBittorrent settings:
+
+| Setting | Value | Description |
+|---------|-------|-------------|
+| Max ratio | 2.0 | Stop seeding completed torrents at 2:1 |
+| Max seeding time | 7 days | Stop after 1 week regardless of ratio |
+| Max inactive seeding | 24 hours | Stop if no upload for 24h |
+| Action | Pause | Pause (not delete) when limit reached |
+
+### Installation
+
+```bash
+# Files
+scripts/qbt-ratio-guard.py              # Main script
+config/systemd/qbt-ratio-guard.service  # Systemd service
+config/systemd/qbt-ratio-guard.timer    # Runs every 15 min
+
+# Install
+sudo cp config/systemd/qbt-ratio-guard.* /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now qbt-ratio-guard.timer
+
+# Check status
+systemctl list-timers qbt-ratio-guard.timer
+
+# Run manually
+./scripts/qbt-ratio-guard.py
+
+# View logs
+tail -f /var/log/qbt-ratio-guard.log
+```
+
+### Sample Output
+
+```
+2025-12-27 06:23:41 [INFO] === qBittorrent Ratio Guard Starting ===
+2025-12-27 06:23:41 [INFO] Monitoring 315 torrents
+2025-12-27 06:23:41 [WARNING] Stopped seeding on 2 abusive torrents:
+2025-12-27 06:23:41 [WARNING]   Ratio:586.4x Up:145.5GB Prog:64% Avail:0.64 - Dead.Swarm.Torrent
+2025-12-27 06:23:41 [ERROR] DEAD SWARMS DETECTED (1) - Consider removing:
+2025-12-27 06:23:41 [ERROR]   Ratio:1022.7x Avail:0.23 - Another.Dead.Torrent
+2025-12-27 06:23:41 [INFO] Summary: 2 stopped, 1 dead swarms, 3 warnings
+```
 
 ---
 
@@ -1966,6 +2048,24 @@ sudo ip netns exec vpn ip route
 
 # Fix: Bring WireGuard back up
 sudo ip netns exec vpn wg-quick up proton0
+```
+
+**Issue: "Nexthop has invalid gateway" error (routing corruption)**
+```bash
+# Symptom: VPN restart fails with all servers, WireGuard handshake stale
+sudo ip netns exec vpn ip route
+# Shows: 10.200.200.0/24 via 10.200.200.1 dev veth-vpn (WRONG!)
+# This creates circular dependency - gateway is unreachable
+
+# Fix: Repair the link-local route
+sudo ip netns exec vpn ip route del 10.200.200.0/24 2>/dev/null
+sudo ip netns exec vpn ip route add 10.200.200.0/24 dev veth-vpn scope link
+sudo ip netns exec vpn ip route add default via 10.200.200.1
+
+# Then restart VPN
+sudo ~/nas-media-server/scripts/qbt-vpn-start.sh restart
+
+# Note: qbt-vpn-start.sh now auto-repairs this issue before connecting
 ```
 
 **Issue: DNS leaking (queries going to ISP)**
