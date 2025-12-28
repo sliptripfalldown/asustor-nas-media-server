@@ -294,7 +294,7 @@ If rebuilding on different hardware, check these files for hardcoded values:
 | `scripts/vpn-namespace-setup.sh` | Network interface auto-detected (override with `WAN_IF=eth0`) |
 | `config/qbittorrent/qBittorrent.conf` | Download paths (`/tank/media/*`) |
 | `config/lazylibrarian/config.ini` | Media paths, API keys |
-| `configs/99-torrent-optimizations.conf` | Kernel tuning (adjust for RAM size) |
+| `config/sysctl/99-torrent-optimizations.conf` | Kernel tuning (adjust for RAM size) |
 
 ### Verify VPN Isolation
 
@@ -1035,7 +1035,7 @@ The encoding config at `/etc/jellyfin/encoding.xml` should have these key settin
 </HardwareDecodingCodecs>
 ```
 
-Full optimized config is at `configs/jellyfin-encoding.xml`.
+Full optimized config is at `config/jellyfin/jellyfin-encoding.xml`.
 
 #### Transcoding Capacity (N5105)
 
@@ -1238,10 +1238,10 @@ sudo ./scripts/vpn-namespace-setup.sh setup
 
 ```bash
 # Copy service files
-sudo cp configs/vpn-namespace.service /etc/systemd/system/
-sudo cp configs/qbittorrent-vpn.service /etc/systemd/system/
-sudo cp configs/prowlarr-vpn.service /etc/systemd/system/
-sudo cp configs/flaresolverr-vpn.service /etc/systemd/system/
+sudo cp config/systemd/vpn-namespace.service /etc/systemd/system/
+sudo cp config/systemd/qbittorrent-vpn.service /etc/systemd/system/
+sudo cp config/systemd/prowlarr-vpn.service /etc/systemd/system/
+sudo cp config/systemd/flaresolverr-vpn.service /etc/systemd/system/
 
 # Disable old services
 sudo systemctl disable qbittorrent-nox prowlarr flaresolverr
@@ -1307,7 +1307,7 @@ sudo ip netns exec vpn nslookup google.com
 
 ```bash
 # Copy all service files
-sudo cp configs/*.service /etc/systemd/system/
+sudo cp config/systemd/*.service /etc/systemd/system/
 
 # Reload systemd
 sudo systemctl daemon-reload
@@ -1327,7 +1327,7 @@ sudo systemctl enable --now \
 
 ### Service Files Reference
 
-All service files are in the `configs/` directory:
+All service files are in the `config/systemd/` directory:
 
 #### VPN Namespace Services (Protected Traffic)
 
@@ -1364,15 +1364,97 @@ These run on the normal network (only talk to local services + legitimate APIs):
 
 ### Configuration Files Reference
 
+All configuration files are organized under the `config/` directory:
+
+```
+config/
+├── defaults.env              # Configurable defaults (user, IPs, ports, paths)
+├── qbittorrent/
+│   ├── qBittorrent.conf     # Optimized qBittorrent settings
+│   └── categories.json      # Download categories for *arr apps
+├── jellyfin/
+│   ├── jellyfin-encoding.xml # Hardware transcoding (Intel QSV)
+│   ├── jellyfin.service.conf # Jellyfin service overrides
+│   └── livetv.xml           # Live TV configuration
+├── sysctl/
+│   └── 99-torrent-optimizations.conf # Kernel network tuning
+├── unpackerr/
+│   └── unpackerr.conf       # Archive extraction config
+├── systemd/                 # All systemd service files
+├── wireguard/
+│   └── servers/             # WireGuard configs (not in git)
+└── ...
+```
+
 | File | Target Location | Description |
 |------|-----------------|-------------|
-| `qBittorrent.conf` | `~/.config/qBittorrent/` | Optimized qBittorrent settings |
-| `categories.json` | `~/.config/qBittorrent/` | Download categories for *arr apps |
-| `unpackerr.conf` | `~/.config/unpackerr/` | Archive extraction config |
-| `99-torrent-optimizations.conf` | `/etc/sysctl.d/` | Kernel network tuning |
-| `jellyfin-encoding.xml` | `/etc/jellyfin/encoding.xml` | Hardware transcoding (Intel QSV) |
+| `config/qbittorrent/qBittorrent.conf` | `~/.config/qBittorrent/` | Optimized qBittorrent settings |
+| `config/qbittorrent/categories.json` | `~/.config/qBittorrent/` | Download categories for *arr apps |
+| `config/unpackerr/unpackerr.conf` | `~/.config/unpackerr/` | Archive extraction config |
+| `config/sysctl/99-torrent-optimizations.conf` | `/etc/sysctl.d/` | Kernel network tuning |
+| `config/jellyfin/jellyfin-encoding.xml` | `/etc/jellyfin/encoding.xml` | Hardware transcoding (Intel QSV) |
+| `config/defaults.env` | (sourced by scripts) | Configurable defaults |
+
+#### Configuration Defaults (`config/defaults.env`)
+
+All previously hardcoded values are now configurable via `config/defaults.env`. Override any setting by creating `~/.nas-media-server.env`:
+
+```bash
+# Example: Override default user and media root
+export APP_USER="myuser"
+export MEDIA_ROOT="/mnt/storage"
+```
+
+Key configurable values:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `APP_USER` | `anon` | System user running services |
+| `MEDIA_ROOT` | `/tank/media` | Root path for all media |
+| `VPN_NAMESPACE_IP` | `10.200.200.2` | VPN namespace IP address |
+| `HOST_BRIDGE_IP` | `10.200.200.1` | Host-side veth bridge IP |
+| `PROTON_DNS` | `10.2.0.1` | ProtonVPN DNS server |
+| `QB_PORT` | `8080` | qBittorrent WebUI port |
+| `MAX_RATIO` | `1.5` | Ratio guard: max ratio for complete torrents |
+| `MAX_RATIO_INCOMPLETE` | `1.0` | Ratio guard: max ratio for incomplete torrents |
 
 ### Scripts Reference
+
+#### Common Library (`scripts/lib/common.sh`)
+
+All scripts can source a common library for consistent error handling and utilities:
+
+```bash
+#!/bin/bash
+source "$(dirname "$0")/lib/common.sh"
+
+# Now you have access to:
+# - Strict mode (set -euo pipefail)
+# - Error trap with line numbers
+# - Colored logging: log_info, log_error, log_warn, log_success, log_fatal
+# - Requirement checks: require_root, require_command, require_file, require_dir
+# - Network helpers: check_port, wait_for_port, require_network
+# - Service helpers: service_running, wait_for_service
+# - API helpers: api_call, get_arr_api_key
+# - Config loading: load_config (sources defaults.env)
+# - Safe download: download (with retry)
+# - Cleanup trap system: add_cleanup, run_cleanup
+```
+
+Example usage:
+
+```bash
+#!/bin/bash
+source "$(dirname "$0")/lib/common.sh"
+
+require_root
+load_config
+
+log_info "Starting setup..."
+require_command curl
+wait_for_port "$VPN_NAMESPACE_IP" "$QB_PORT"
+log_success "qBittorrent is available"
+```
 
 #### VPN Namespace Scripts
 
@@ -1499,7 +1581,7 @@ The default qBittorrent config is not optimized for seeding thousands of torrent
 Install kernel optimizations:
 
 ```bash
-sudo cp configs/99-torrent-optimizations.conf /etc/sysctl.d/
+sudo cp config/sysctl/99-torrent-optimizations.conf /etc/sysctl.d/
 sudo sysctl -p /etc/sysctl.d/99-torrent-optimizations.conf
 ```
 
@@ -1519,7 +1601,7 @@ Copy the optimized config:
 
 ```bash
 mkdir -p ~/.config/qBittorrent
-cp configs/qBittorrent.conf ~/.config/qBittorrent/
+cp config/qbittorrent/qBittorrent.conf ~/.config/qBittorrent/
 sudo systemctl restart qbittorrent-vpn
 ```
 
@@ -1564,7 +1646,7 @@ Key optimizations in `qBittorrent.conf`:
 Run the optimization script:
 
 ```bash
-./configs/apply-torrent-optimizations.sh
+./scripts/apply-torrent-optimizations.sh
 ```
 
 This will:
@@ -1696,7 +1778,7 @@ Unpackerr automatically extracts downloaded archives for *arr apps.
 
 1. Copy and edit the config:
 ```bash
-cp configs/unpackerr.conf ~/.config/unpackerr/
+cp config/unpackerr/unpackerr.conf ~/.config/unpackerr/
 # Edit to add your API keys
 nano ~/.config/unpackerr/unpackerr.conf
 ```
@@ -1708,10 +1790,10 @@ sudo systemctl enable --now unpackerr
 
 ### qBittorrent Categories
 
-Copy `configs/categories.json` to set up download categories for each *arr app:
+Copy `config/qbittorrent/categories.json` to set up download categories for each *arr app:
 
 ```bash
-cp configs/categories.json ~/.config/qBittorrent/
+cp config/qbittorrent/categories.json ~/.config/qBittorrent/
 sudo systemctl restart qbittorrent-vpn
 ```
 
