@@ -29,10 +29,11 @@ QB_USER = os.environ.get("QB_USER", "admin")
 QB_PASS = os.environ.get("QB_PASS", "adminadmin")
 
 # Thresholds
-MAX_RATIO_INCOMPLETE = 5.0      # Stop seeding incomplete torrents above this ratio
-MAX_RATIO_DEAD_SWARM = 10.0     # Consider removing if ratio exceeds this
+MAX_RATIO = 1.5                 # Stop seeding ANY torrent above this ratio
+MAX_RATIO_INCOMPLETE = 1.0      # Stop seeding incomplete torrents above this (stricter)
+MAX_RATIO_DEAD_SWARM = 5.0      # Consider removing if ratio exceeds this
 MIN_AVAILABILITY_DEAD = 0.5     # Below this + high ratio = dead swarm
-NOTIFY_RATIO = 3.0              # Log warning when ratio exceeds this
+NOTIFY_RATIO = 1.0              # Log warning when ratio exceeds this
 
 # Logging
 LOG_FILE = "/var/log/qbt-ratio-guard.log"
@@ -112,6 +113,70 @@ def format_size(bytes_val):
     return f"{bytes_val:.1f}PB"
 
 
+def get_arr_api_key(config_path):
+    """Extract API key from *arr config file"""
+    try:
+        with open(config_path) as f:
+            import re
+            match = re.search(r'<ApiKey>([^<]+)</ApiKey>', f.read())
+            return match.group(1) if match else None
+    except:
+        return None
+
+
+def trigger_arr_searches(dead_swarms):
+    """Trigger re-searches in Radarr/Sonarr for dead swarm torrents"""
+    # Get API keys
+    radarr_key = get_arr_api_key(os.path.expanduser("~/.config/Radarr/config.xml"))
+    sonarr_key = get_arr_api_key(os.path.expanduser("~/.config/Sonarr/config.xml"))
+
+    for swarm in dead_swarms:
+        category = swarm.get('category', '')
+        name = swarm.get('name', '')
+
+        try:
+            if category == 'radarr' and radarr_key:
+                # Find movie in Radarr queue and trigger search
+                queue = requests.get(
+                    "http://localhost:7878/api/v3/queue",
+                    headers={"X-Api-Key": radarr_key}
+                ).json()
+
+                for item in queue.get('records', []):
+                    if item.get('title', '') in name or name in item.get('title', ''):
+                        movie_id = item.get('movieId')
+                        if movie_id:
+                            requests.post(
+                                "http://localhost:7878/api/v3/command",
+                                headers={"X-Api-Key": radarr_key, "Content-Type": "application/json"},
+                                json={"name": "MoviesSearch", "movieIds": [movie_id]}
+                            )
+                            log.info(f"  Triggered Radarr re-search for movie ID {movie_id}")
+                        break
+
+            elif category == 'sonarr' and sonarr_key:
+                # Find series in Sonarr queue and trigger search
+                queue = requests.get(
+                    "http://localhost:8989/api/v3/queue",
+                    headers={"X-Api-Key": sonarr_key}
+                ).json()
+
+                for item in queue.get('records', []):
+                    if item.get('title', '') in name or name in item.get('title', ''):
+                        series_id = item.get('seriesId')
+                        if series_id:
+                            requests.post(
+                                "http://localhost:8989/api/v3/command",
+                                headers={"X-Api-Key": sonarr_key, "Content-Type": "application/json"},
+                                json={"name": "SeriesSearch", "seriesId": series_id}
+                            )
+                            log.info(f"  Triggered Sonarr re-search for series ID {series_id}")
+                        break
+
+        except Exception as e:
+            log.error(f"  Failed to trigger re-search for {name}: {e}")
+
+
 def main():
     log.info("=== qBittorrent Ratio Guard Starting ===")
 
@@ -131,39 +196,45 @@ def main():
 
     for t in torrents:
         name = t.get('name', 'Unknown')[:60]
-        ratio = calculate_ratio(t)
+        ratio = t.get('ratio', 0)  # Use qBittorrent's ratio directly
         progress = t.get('progress', 0)
         availability = t.get('availability', -1)
         state = t.get('state', '')
         current_limit = t.get('ratio_limit', -2)
         uploaded = t.get('uploaded', 0)
+        is_complete = progress >= 1.0
 
-        # Skip if already limited
+        # Skip if already limited to 0 (no seeding)
         if current_limit == 0:
             continue
 
-        # Skip completed and properly seeding torrents (they follow global limits)
-        if progress >= 1.0:
+        # Skip if not actively seeding (already paused/stopped)
+        if state in ('pausedUP', 'stoppedUP', 'pausedDL', 'stoppedDL'):
             continue
 
-        # Check for abuse on incomplete torrents
-        if ratio > MAX_RATIO_INCOMPLETE:
+        # Determine the threshold based on completion status
+        threshold = MAX_RATIO if is_complete else MAX_RATIO_INCOMPLETE
+
+        # Check for abuse - applies to ALL torrents
+        if ratio > threshold:
             stop_seeding.append({
                 'hash': t['hash'],
                 'name': name,
                 'ratio': ratio,
                 'uploaded': uploaded,
                 'progress': progress,
-                'availability': availability
+                'availability': availability,
+                'complete': is_complete
             })
 
-            # Check if it's a dead swarm
-            if ratio > MAX_RATIO_DEAD_SWARM and 0 <= availability < MIN_AVAILABILITY_DEAD:
+            # Check if it's a dead swarm (incomplete with very high ratio and low availability)
+            if not is_complete and ratio > MAX_RATIO_DEAD_SWARM and 0 <= availability < MIN_AVAILABILITY_DEAD:
                 dead_swarms.append({
                     'hash': t['hash'],
                     'name': name,
                     'ratio': ratio,
-                    'availability': availability
+                    'availability': availability,
+                    'category': t.get('category', '')
                 })
 
         elif ratio > NOTIFY_RATIO:
@@ -185,12 +256,29 @@ def main():
             log.warning(f"  Ratio:{ratio_str}x Up:{format_size(t['uploaded'])} "
                        f"Prog:{t['progress']*100:.0f}% Avail:{t['availability']:.2f} - {t['name']}")
 
-    # Log dead swarms (for manual review)
+    # Handle dead swarms - delete and trigger re-search
     if dead_swarms:
-        log.error(f"DEAD SWARMS DETECTED ({len(dead_swarms)}) - Consider removing:")
+        log.warning(f"REMOVING {len(dead_swarms)} DEAD SWARMS and triggering re-searches:")
+
         for t in dead_swarms:
             ratio_str = f"{t['ratio']:.1f}" if t['ratio'] < 10000 else "INF"
-            log.error(f"  Ratio:{ratio_str}x Avail:{t['availability']:.2f} - {t['name']}")
+            log.warning(f"  Ratio:{ratio_str}x Avail:{t['availability']:.2f} - {t['name']}")
+
+        # Delete the torrents and their files
+        dead_hashes = [t['hash'] for t in dead_swarms]
+        qb.delete_torrents(dead_hashes, delete_files=True)
+
+        # Trigger re-searches in Radarr/Sonarr
+        trigger_arr_searches(dead_swarms)
+
+    # Remove completed torrents that hit ratio limit (keep files)
+    completed_done = [t for t in stop_seeding if t.get('complete', False)]
+    if completed_done:
+        log.info(f"Removing {len(completed_done)} completed torrents that hit ratio limit (keeping files):")
+        for t in completed_done:
+            log.info(f"  Ratio:{t['ratio']:.1f}x - {t['name']}")
+        done_hashes = [t['hash'] for t in completed_done]
+        qb.delete_torrents(done_hashes, delete_files=False)
 
     # Log warnings
     if warnings:
