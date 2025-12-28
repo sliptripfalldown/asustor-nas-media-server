@@ -15,10 +15,10 @@ sudo chmod +x /usr/local/bin/qbittorrent-nox
 
 # Copy VPN namespace services
 echo "Installing VPN namespace services..."
-sudo cp /home/anon/nas-media-server/configs/vpn-namespace.service /etc/systemd/system/
-sudo cp /home/anon/nas-media-server/configs/qbittorrent-vpn.service /etc/systemd/system/
-sudo cp /home/anon/nas-media-server/configs/prowlarr-vpn.service /etc/systemd/system/
-sudo cp /home/anon/nas-media-server/configs/flaresolverr-vpn.service /etc/systemd/system/
+sudo cp /home/anon/nas-media-server/config/systemd/vpn-namespace.service /etc/systemd/system/
+sudo cp /home/anon/nas-media-server/config/systemd/qbittorrent-vpn.service /etc/systemd/system/
+sudo cp /home/anon/nas-media-server/config/systemd/prowlarr-vpn.service /etc/systemd/system/
+sudo cp /home/anon/nas-media-server/config/systemd/flaresolverr-vpn.service /etc/systemd/system/
 
 # Copy VPN namespace scripts
 echo "Installing VPN namespace scripts..."

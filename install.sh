@@ -66,19 +66,19 @@ echo "  Step 5/9: Configuring qBittorrent"
 echo "=========================================="
 # Install optimized qBittorrent config
 mkdir -p /home/${REAL_USER}/.config/qBittorrent
-cp ${SCRIPT_DIR}/configs/qBittorrent.conf /home/${REAL_USER}/.config/qBittorrent/
+cp ${SCRIPT_DIR}/config/qbittorrent/qBittorrent.conf /home/${REAL_USER}/.config/qBittorrent/
 chown -R ${REAL_USER}:${REAL_USER} /home/${REAL_USER}/.config/qBittorrent
 
 # Install VPN namespace services (NEVER use user services)
-cp ${SCRIPT_DIR}/configs/vpn-namespace.service /etc/systemd/system/
-cp ${SCRIPT_DIR}/configs/qbittorrent-vpn.service /etc/systemd/system/
-cp ${SCRIPT_DIR}/configs/prowlarr-vpn.service /etc/systemd/system/
-cp ${SCRIPT_DIR}/configs/flaresolverr-vpn.service /etc/systemd/system/
+cp ${SCRIPT_DIR}/config/systemd/vpn-namespace.service /etc/systemd/system/
+cp ${SCRIPT_DIR}/config/systemd/qbittorrent-vpn.service /etc/systemd/system/
+cp ${SCRIPT_DIR}/config/systemd/prowlarr-vpn.service /etc/systemd/system/
+cp ${SCRIPT_DIR}/config/systemd/flaresolverr-vpn.service /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable vpn-namespace qbittorrent-vpn
 
 # Install kernel network optimizations
-cp ${SCRIPT_DIR}/configs/99-torrent-optimizations.conf /etc/sysctl.d/
+cp ${SCRIPT_DIR}/config/sysctl/99-torrent-optimizations.conf /etc/sysctl.d/
 sysctl -p /etc/sysctl.d/99-torrent-optimizations.conf
 
 echo ""

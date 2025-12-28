@@ -19,3 +19,16 @@ Thumbs.db
 # VPN configs (contain private keys)
 config/wireguard/servers/*.conf
 config/wireguard/active.conf
+
+# User-specific overrides
+*.env.local
+.nas-media-server.env
+
+# Deprecated configs directory (consolidated into config/)
+configs/
+
+# Log files
+logs/*.log
+
+# State files (runtime data)
+logs/*.json
