@@ -1,0 +1,14 @@
+[Unit]
+Description=Add public trackers to suffering torrents
+After=network-online.target qbittorrent-vpn.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/home/anon/nas-media-server/scripts/add-trackers.sh
+User=root
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

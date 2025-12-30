@@ -99,8 +99,11 @@ setup_vpn_in_namespace() {
     ip link add $WG_IF type wireguard
     ip link set $WG_IF netns $NAMESPACE
 
-    # Configure WireGuard
-    ip netns exec $NAMESPACE wg setconf $WG_IF <(grep -v "^Address\|^DNS" "$ACTIVE_CONF")
+    # Configure WireGuard (use temp file - process substitution doesn't work with ip netns exec)
+    local wg_temp=$(mktemp)
+    grep -v "^Address\|^DNS" "$ACTIVE_CONF" > "$wg_temp"
+    ip netns exec $NAMESPACE wg setconf $WG_IF "$wg_temp"
+    rm -f "$wg_temp"
 
     # Get address from config and apply
     local wg_addr=$(grep -i "^Address" "$ACTIVE_CONF" | cut -d= -f2 | tr -d ' ' | cut -d, -f1)
@@ -124,8 +127,22 @@ teardown_vpn() {
 }
 
 test_vpn_connection() {
-    # Quick connectivity test
-    ip netns exec $NAMESPACE ping -c 1 -W 3 1.1.1.1 &>/dev/null
+    # Wait for WireGuard handshake to establish
+    local attempts=0
+    local max_attempts=5
+
+    while [[ $attempts -lt $max_attempts ]]; do
+        # Check if handshake has occurred
+        if ip netns exec $NAMESPACE wg show $WG_IF 2>/dev/null | grep -q "latest handshake"; then
+            # Verify connectivity
+            if ip netns exec $NAMESPACE ping -c 1 -W 3 1.1.1.1 &>/dev/null; then
+                return 0
+            fi
+        fi
+        attempts=$((attempts + 1))
+        sleep 2
+    done
+    return 1
 }
 
 get_vpn_ip() {

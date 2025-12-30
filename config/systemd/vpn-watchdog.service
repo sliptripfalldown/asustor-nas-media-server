@@ -1,0 +1,19 @@
+[Unit]
+Description=VPN Watchdog - Auto-reconnect and server rotation
+After=vpn-namespace.service
+Wants=vpn-namespace.service
+
+[Service]
+Type=simple
+ExecStart=/home/anon/nas-media-server/scripts/vpn-watchdog.sh
+Restart=always
+RestartSec=10
+User=root
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=vpn-watchdog
+
+[Install]
+WantedBy=multi-user.target
