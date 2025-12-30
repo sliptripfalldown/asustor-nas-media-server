@@ -47,7 +47,7 @@ A self-hosted media server with VPN-protected downloads, the *arr stack, and Jel
 ### 1. Clone & Configure
 
 ```bash
-git clone https://github.com/YOUR_USER/nas-media-server.git ~/nas-media-server
+git clone https://github.com/sliptripfalldown/nas-media-server.git ~/nas-media-server
 cd ~/nas-media-server
 ```
 
