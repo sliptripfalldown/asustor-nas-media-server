@@ -1,0 +1,12 @@
+[Unit]
+Description=ASUSTOR LED Triggers Configuration
+After=multi-user.target
+Wants=multi-user.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/asustor-led-setup.sh
+
+[Install]
+WantedBy=multi-user.target

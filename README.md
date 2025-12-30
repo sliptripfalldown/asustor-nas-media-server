@@ -40,6 +40,7 @@ A self-hosted media server with VPN-protected downloads, the *arr stack, and Jel
 | **Queue Management** | Auto-prioritizes healthy downloads over struggling ones |
 | **Ratio Protection** | Prevents infinite upload in dead swarms |
 | **ZFS RAIDZ2** | 6x NVMe drives, can lose 2 drives, ~7.3TB usable |
+| **Hardware Control** | Automatic fan curves, LED triggers, temperature monitoring |
 
 ## Quick Start
 
@@ -167,7 +168,7 @@ See [Hardware Guide](docs/HARDWARE.md) for benchmarks and optimization.
 
 | Guide | Description |
 |-------|-------------|
-| [Hardware](docs/HARDWARE.md) | Specs, benchmarks, fan control |
+| [Hardware](docs/HARDWARE.md) | Specs, benchmarks, fan control, LED triggers |
 | [Storage](docs/STORAGE.md) | ZFS setup, file sharing |
 | [VPN](docs/VPN.md) | Namespace architecture, watchdog, traffic verification |
 | [Services](docs/SERVICES.md) | *arr stack, Jellyfin, qBittorrent optimization |
@@ -181,6 +182,7 @@ nas-media-server/
 ├── config/
 │   ├── systemd/           # Service files (vpn-namespace, qbittorrent-vpn, etc.)
 │   ├── qbittorrent/       # Optimized qBittorrent config
+│   ├── fancontrol/        # Automatic fan curve configuration
 │   ├── wireguard/
 │   │   └── servers/       # Your WireGuard configs (gitignored)
 │   └── sysctl/            # Kernel network tuning
@@ -188,6 +190,8 @@ nas-media-server/
 │   ├── vpn-namespace-setup.sh    # Create VPN namespace
 │   ├── qbt-vpn-start.sh          # Start qBittorrent + WireGuard
 │   ├── vpn-watchdog.sh           # Monitor VPN, auto-recover
+│   ├── hardware-control.sh       # Fan, LED, and sensor control
+│   ├── setup-hardware-controls.sh # Install fancontrol + LED services
 │   ├── configure-arr-stack.sh    # Configure *arr apps
 │   ├── qbit-queue-manager.py     # Prioritize healthy downloads
 │   └── qbt-ratio-guard.py        # Protect against ratio abuse
@@ -201,6 +205,7 @@ nas-media-server/
 | Task | Frequency | Description |
 |------|-----------|-------------|
 | VPN Watchdog | Every 30s | Monitor health, auto-reconnect |
+| Fancontrol | Every 5s | Adjust fan speed based on CPU temp |
 | Ratio Guard | Every 15 min | Stop excessive uploads |
 | Queue Manager | Every 30 min | Prioritize healthy torrents |
 | Tracker Aggregator | Hourly | Add public trackers to stalled torrents |

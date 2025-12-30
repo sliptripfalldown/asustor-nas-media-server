@@ -8,6 +8,8 @@ Hardware specifications, benchmarks, and optimization for the ASUSTOR Flashstor 
 - [Performance Benchmarks](#performance-benchmarks)
 - [Temperature Monitoring](#temperature-monitoring)
 - [Fan Control](#fan-control)
+- [LED Control](#led-control)
+- [Hardware Control Script](#hardware-control-script)
 - [Hardware Recommendations](#hardware-recommendations)
 
 ---
@@ -160,52 +162,144 @@ done
 
 ## Fan Control
 
-### Set Maximum Fan Speed
+### Automatic Fan Control (Recommended)
 
-For systems running heavy transcoding/download workloads:
+The system uses `fancontrol` for automatic temperature-based fan speed:
 
 ```bash
-# Find the PWM control (usually hwmon10 for it8625)
-ls /sys/class/hwmon/*/name | while read f; do echo "$f: $(cat $f 2>/dev/null)"; done
-
-# Set fan to 100% (255 PWM)
-sudo sh -c 'echo 255 > /sys/class/hwmon/hwmon10/pwm1'
-
-# Verify
-sensors | grep fan1
+# Install automatic fan control
+sudo ./scripts/setup-hardware-controls.sh
 ```
 
-### Persistent Fan Settings (Systemd)
+This configures a fan curve based on CPU temperature:
+- Below 40°C: ~30% speed (quiet)
+- 40-65°C: Linear ramp to 100%
+- Above 65°C: 100% (full speed)
 
-Create a service to set fans to maximum at boot:
+### Manual Fan Control
 
 ```bash
-sudo tee /etc/systemd/system/asustor-fanmax.service << 'EOF'
-[Unit]
-Description=Set ASUSTOR fans to maximum
-After=multi-user.target
+# Set fan to specific PWM (0-255)
+./scripts/hardware-control.sh fan 128    # 50% speed
 
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-ExecStart=/bin/bash -c 'for pwm in /sys/class/hwmon/*/pwm1; do [ -f "$pwm" ] && echo 255 > "$pwm"; done'
+# Enable automatic mode
+./scripts/hardware-control.sh fan auto
 
-[Install]
-WantedBy=multi-user.target
-EOF
-
-sudo systemctl daemon-reload
-sudo systemctl enable asustor-fanmax.service
+# Check current status
+./scripts/hardware-control.sh fan
 ```
 
 ### Fan Speed Reference
 
 | PWM Value | Speed | Use Case |
 |-----------|-------|----------|
-| 50 | ~20% (~1400 RPM) | Idle, quiet |
-| 128 | ~50% (~2500 RPM) | Light load |
+| 80 | ~30% (~2200 RPM) | Idle, quiet |
+| 128 | ~50% (~2800 RPM) | Light load |
 | 180 | ~70% (~3500 RPM) | Moderate load |
 | 255 | 100% (~4300 RPM) | Heavy transcoding/downloads |
+
+### Fancontrol Configuration
+
+The configuration is stored in `/etc/fancontrol`:
+
+```bash
+# View current configuration
+cat /etc/fancontrol
+
+# Restart after changes
+sudo systemctl restart fancontrol
+```
+
+---
+
+## LED Control
+
+The Flashstor 6 has multiple controllable LEDs via the asustor-platform-driver.
+
+### Available LEDs
+
+| LED | Purpose | Default State |
+|-----|---------|---------------|
+| `blue:power` | Power indicator | On |
+| `red:power` | Power error | Off |
+| `green:status` | System status | On |
+| `red:status` | System error | Off (panic trigger) |
+| `blue:lan` | Network activity | On |
+| `nvme1:green:disk` | Disk activity | On (disk-activity trigger) |
+| `nvme1:red:disk` | Disk error | Off |
+| `red:side_inner/mid/outer` | Side accent LEDs | On |
+
+### LED Triggers
+
+LEDs can be set to respond to system events:
+
+```bash
+# Set disk LED to blink on activity
+./scripts/hardware-control.sh led nvme1:green:disk trigger disk-activity
+
+# Turn off side LEDs (stealth mode)
+./scripts/hardware-control.sh side off
+
+# View available triggers
+./scripts/hardware-control.sh led green:status trigger
+```
+
+Available triggers: `none`, `disk-activity`, `disk-read`, `disk-write`, `cpu`, `panic`, and others.
+
+### Boot Configuration
+
+LED triggers are configured at boot via `asustor-leds.service`:
+
+```bash
+# Check service status
+systemctl status asustor-leds
+
+# Modify boot configuration
+sudo nano /usr/local/bin/asustor-led-setup.sh
+```
+
+---
+
+## Hardware Control Script
+
+A unified script for all hardware controls:
+
+```bash
+./scripts/hardware-control.sh [command]
+```
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `status` | Show all hardware status |
+| `temps` | Show all temperature sensors |
+| `fan [0-255\|auto\|manual]` | Control fan speed |
+| `led <name> [0\|1]` | Set LED on/off |
+| `led <name> trigger [name]` | Set LED trigger |
+| `leds` | List all available LEDs |
+| `blink [on\|off]` | Control status LED blinking |
+| `side [on\|off]` | Control side accent LEDs |
+
+### Examples
+
+```bash
+# Show full status
+./scripts/hardware-control.sh status
+
+# Set fan to 50%
+./scripts/hardware-control.sh fan 128
+
+# Turn off annoying blinking LED
+./scripts/hardware-control.sh blink off
+
+# Enable disk activity LED
+./scripts/hardware-control.sh led nvme1:green:disk trigger disk-activity
+
+# Stealth mode - turn off all LEDs
+./scripts/hardware-control.sh side off
+./scripts/hardware-control.sh led blue:power 0
+```
 
 ---
 
